@@ -1,193 +1,325 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:mysql1/mysql1.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
-  runApp(MaterialApp(home: MyApp()));
+  runApp(const MyApp());
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  List dataBarang = [];
-  var namaBarang = "";
-  var jenisBarang = "";
-  var deskripsiBarang = "";
-
-  Future<void> readDataGudang() async {
-    final connect = await MySqlConnection.connect(ConnectionSettings(
-        host: '10.0.2.2', port: 3306, user: 'root', db: 'pbbmod12'));
-    try {
-      var result = await connect.query('SELECT * FROM gudang');
-      setState(() {
-        dataBarang.clear();
-        for (var row in result) {
-          dataBarang.add(row);
-          print(row['namaBarang']);
-        }
-      });
-    } catch (e) {
-      print("Error reading data: $e");
-    } finally {
-      await connect.close();
-    }
-  }
-
-  Future<void> createDataGudang() async {
-    final connect = await MySqlConnection.connect(ConnectionSettings(
-        host: '10.0.2.2', port: 3306, user: 'root', db: 'pbbmod12'));
-
-    try {
-      await connect.query(
-        'INSERT INTO gudang (namaBarang, jenisBarang, deskripsiBarang) VALUES (?, ?, ?)',
-        [namaBarang, jenisBarang, deskripsiBarang],
-      );
-    } catch (e) {
-      print("Error inserting data: $e");
-    } finally {
-      await connect.close();
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    readDataGudang();
-  }
+class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            "Data Gudang",
-            style: TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Colors.blue,
-        ),
-        body: SingleChildScrollView(
-          child: Container(
-            height: MediaQuery.of(context).size.height * 0.7,
-            child: dataBarang.isEmpty
-                ? Center(child: Text("Tidak ada Barang"))
-                : ListView.builder(
-                    itemCount: dataBarang.length,
-                    itemBuilder: (context, index) {
-                      return Container(
-                        width: MediaQuery.of(context).size.width,
-                        margin: EdgeInsets.fromLTRB(10, 5, 10, 5),
-                        decoration:
-                            BoxDecoration(color: Colors.white, boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.5),
-                            spreadRadius: 0.5,
-                            blurRadius: 3,
-                            offset: Offset(0, 1),
-                          ),
-                        ]),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 10, 10, 10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                dataBarang[index]['namaBarang'],
-                                style: TextStyle(fontSize: 20),
-                              ),
-                              Text(
-                                dataBarang[index]['jenisBarang'],
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.black.withOpacity(0.5)),
-                              )
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+      title: 'Flutter Demo',
+      theme: ThemeData(
+          primarySwatch: Colors.blue, scaffoldBackgroundColor: Colors.white),
+      home: const MyHomePage(),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({Key? key}) : super(key: key);
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  List<Map<String, String>> _data = [];
+
+  TextEditingController nama = TextEditingController();
+  TextEditingController kategori = TextEditingController();
+  TextEditingController deskripsi = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    fetchData();
+  }
+
+  Future<void> fetchData() async {
+    try {
+      String uri = "http://10.0.2.2/gudang_api/get_data.php";
+      var res = await http.get(Uri.parse(uri));
+      var response = jsonDecode(res.body);
+      if (response["success"] == "true") {
+        setState(() {
+          _data = List<Map<String, String>>.from(
+              response["data"].map((item) => Map<String, String>.from(item)));
+        });
+      } else {
+        print("Failed to fetch data");
+        setState(() {
+          _data = [];
+        });
+      }
+    } catch (e) {
+      print(e);
+      setState(() {
+        _data = [];
+      });
+    }
+  }
+
+  Future<void> insertData() async {
+    if (nama.text.isNotEmpty &&
+        kategori.text.isNotEmpty &&
+        deskripsi.text.isNotEmpty) {
+      try {
+        String uri = "http://10.0.2.2/gudang_api/insert_data.php";
+
+        var res = await http.post(Uri.parse(uri), body: {
+          "nama": nama.text,
+          "kategori": kategori.text,
+          "deskripsi": deskripsi.text
+        });
+
+        var response = jsonDecode(res.body);
+        if (response["success"] == "true") {
+          print("Data telah ditemukan");
+          fetchData();
+        } else {
+          print("Ada masalah!");
+        }
+      } catch (e) {
+        print(e);
+      }
+    } else {
+      print("Tolong isikan semua data yang ada");
+    }
+  }
+
+  Future<void> deleteData(String id) async {
+    try {
+      String uri = "http://10.0.2.2/gudang_api/delete_data.php";
+      var res = await http.post(Uri.parse(uri), body: {"id": id});
+      var response = jsonDecode(res.body);
+      if (response["success"] == "true") {
+        print("Data telah dihapus");
+        fetchData();
+      } else {
+        print("Gagal menghapus data");
+      }
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  Future<void> updateData(
+      String id, String nama, String kategori, String deskripsi) async {
+    try {
+      String uri = "http://10.0.2.2/gudang_api/update_data.php";
+      var res = await http.post(Uri.parse(uri), body: {
+        "id": id,
+        "nama": nama,
+        "kategori": kategori,
+        "deskripsi": deskripsi
+      });
+
+      var response = jsonDecode(res.body);
+      if (response["success"] == "true") {
+        print("Data berhasil diperbarui");
+        fetchData();
+      } else {
+        print("Gagal memperbarui data: ${response["message"]}");
+      }
+    } catch (e) {
+      print("Terjadi kesalahan : $e");
+    }
+  }
+
+  Future<void> editData(Map<String, String> item) async {
+    nama.text = item['nama']!;
+    kategori.text = item['kategori']!;
+    deskripsi.text = item['deskripsi']!;
+    await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Edit Data Gudang'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const SizedBox(height: 15),
+                TextField(
+                  controller: nama,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Masukkan Data Barang',
                   ),
-          ),
+                ),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: kategori,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Masukkan Kategori Barang',
+                  ),
+                ),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: deskripsi,
+                  decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Masukkan Deskripsi Barang'),
+                ),
+              ],
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  updateData(
+                      item['id']!, nama.text, kategori.text, deskripsi.text);
+                  Navigator.of(context).pop();
+                  nama.clear();
+                  kategori.clear();
+                  deskripsi.clear();
+                },
+                child: Text('Simpan'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: Text('Batal'),
+              )
+            ],
+          );
+        });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Data Gudang',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            showDialog(
+        backgroundColor: Colors.blue,
+      ),
+      body: ListView.builder(
+        itemCount: _data.length,
+        itemBuilder: (context, index) {
+          final item = _data[index];
+          return ItemCard(
+              item: item,
+              onDelete: () {
+                deleteData(item['id']!);
+              },
+              onTap: () {
+                editData(item);
+              });
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('Tambah Data Gudang'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: nama,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Masukkan Data Barang',
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: kategori,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Masukkan Kategori Barang',
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: deskripsi,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Masukkan Deskripsi Barang',
+                      ),
+                    )
+                  ],
+                ),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: () {
+                      insertData();
+                      Navigator.of(context).pop();
+                      nama.clear();
+                      kategori.clear();
+                      deskripsi.clear();
+                    },
+                    child: const Text('Simpan'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('Batal'),
+                  )
+                ],
+              );
+            },
+          );
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class ItemCard extends StatelessWidget {
+  final Map<String, String> item;
+  final VoidCallback onDelete;
+  final VoidCallback onTap;
+
+  ItemCard({required this.item, required this.onDelete, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        title: Text(item['nama']!),
+        subtitle: Text(item['kategori']!),
+        onTap: onTap,
+        onLongPress: () {
+          showDialog(
               context: context,
               builder: (BuildContext context) {
                 return AlertDialog(
-                  backgroundColor: Colors.white,
-                  title: Text('Tambah Data Gudang'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        decoration: InputDecoration(
-                          labelText: 'Masukkan Nama Barang',
-                          labelStyle:
-                              TextStyle(color: Colors.black.withOpacity(0.60)),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10.0),
-                            borderSide: BorderSide(
-                                color: Colors.black.withOpacity(0.60)),
-                          ),
-                        ),
-                        onChanged: (value) {
-                          namaBarang = value;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        onChanged: (value) {
-                          jenisBarang = value;
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Masukkan Kategori Barang',
-                          labelStyle:
-                              TextStyle(color: Colors.black.withOpacity(0.6)),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10.0),
-                            borderSide: BorderSide(
-                                color: Colors.black.withOpacity(0.60)),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      Container(
-                        width: MediaQuery.of(context).size.width,
-                        child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(5)),
-                            ),
-                            onPressed: () async {
-                              if (namaBarang != "" &&
-                                  jenisBarang != "" &&
-                                  deskripsiBarang != "") {
-                                await createDataGudang();
-                                await readDataGudang();
-                                Navigator.of(context).pop();
-                              }
-                            },
-                            child: Text(
-                              "Save",
-                              style: TextStyle(color: Colors.white),
-                            )),
-                      )
-                    ],
-                  ),
+                  title: const Text('Hapus Data'),
+                  content:
+                      const Text('Apakah Anda yakin ingin menghapus data ini'),
+                  actions: <Widget>[
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('Batal'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        onDelete();
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('Hapus'),
+                    )
+                  ],
                 );
-              },
-            );
-          },
-          child: Icon(Icons.add),
-          foregroundColor: Colors.white,
-          shape: CircleBorder(),
-          backgroundColor: Colors.blue,
-        ),
+              });
+        },
       ),
     );
   }
